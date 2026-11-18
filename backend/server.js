@@ -11,21 +11,49 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
-// MongoDB connection
+// MongoDB Connection
 mongoose
-  .connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/leave-management")
+  .connect(
+    process.env.MONGO_URI ||
+      "mongodb://127.0.0.1:27017/leave-management"
+  )
   .then(() => console.log("MongoDB Connected Successfully"))
-  .catch((error) => console.log("MongoDB Connection Error:", error.message));
+  .catch((error) =>
+    console.error("MongoDB Connection Error:", error)
+  );
 
 // Leave Schema
-const leaveSchema = new mongoose.Schema({
-  employeeName: { type: String, required: true },
-  leaveType: { type: String, required: true },
-  startDate: { type: String, required: true },
-  endDate: { type: String, required: true },
-  reason: { type: String, required: true },
-  status: { type: String, default: "Pending" }
-}, { timestamps: true });
+const leaveSchema = new mongoose.Schema(
+  {
+    employeeName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    leaveType: {
+      type: String,
+      required: true,
+    },
+    startDate: {
+      type: String,
+      required: true,
+    },
+    endDate: {
+      type: String,
+      required: true,
+    },
+    reason: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    status: {
+      type: String,
+      default: "Pending",
+    },
+  },
+  { timestamps: true }
+);
 
 const Leave = mongoose.model("Leave", leaveSchema);
 
@@ -34,74 +62,130 @@ app.get("/", (req, res) => {
   res.send("Leave Management API is Running!");
 });
 
-// Get all leave requests
+// Get All Leave Requests
 app.get("/leaves", async (req, res) => {
   try {
     const leaves = await Leave.find().sort({ createdAt: -1 });
-    res.json(leaves);
+    res.status(200).json(leaves);
   } catch (error) {
-    res.status(500).json({ message: "Unable to fetch leave requests" });
+    console.error("Fetch Leaves Error:", error);
+    res.status(500).json({
+      message: error.message || "Unable to fetch leave requests",
+    });
   }
 });
 
-// Apply for leave
+// Apply for Leave
 app.post("/leaves", async (req, res) => {
   try {
-    const { employeeName, leaveType, startDate, endDate, reason } = req.body;
-
-    if (!employeeName || !leaveType || !startDate || !endDate || !reason) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    const leave = new Leave({
+    const {
       employeeName,
       leaveType,
       startDate,
       endDate,
-      reason
+      reason,
+    } = req.body;
+
+    if (
+      !employeeName?.trim() ||
+      !leaveType ||
+      !startDate ||
+      !endDate ||
+      !reason?.trim()
+    ) {
+      return res.status(400).json({
+        message: "All fields are required",
+      });
+    }
+
+    if (endDate < startDate) {
+      return res.status(400).json({
+        message: "End date must be on or after the start date",
+      });
+    }
+
+    const leave = new Leave({
+      employeeName: employeeName.trim(),
+      leaveType,
+      startDate,
+      endDate,
+      reason: reason.trim(),
     });
 
     await leave.save();
-    res.status(201).json(leave);
+
+    console.log("Leave Applied Successfully:", leave._id);
+
+    res.status(201).json({
+      message: "Leave applied successfully",
+      leave,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Unable to apply for leave" });
+    console.error("Apply Leave Error:", error);
+
+    res.status(500).json({
+      message: error.message || "Unable to apply for leave",
+    });
   }
 });
 
-// Update leave status
+// Update Leave Status
 app.patch("/leaves/:id", async (req, res) => {
   try {
+    const { status } = req.body;
+
+    if (!["Pending", "Approved", "Rejected"].includes(status)) {
+      return res.status(400).json({
+        message: "Invalid leave status",
+      });
+    }
+
     const leave = await Leave.findByIdAndUpdate(
       req.params.id,
-      { status: req.body.status },
-      { new: true, runValidators: true }
+      { status },
+      { returnDocument: "after", runValidators: true }
     );
 
     if (!leave) {
-      return res.status(404).json({ message: "Leave request not found" });
+      return res.status(404).json({
+        message: "Leave request not found",
+      });
     }
 
-    res.json(leave);
+    res.status(200).json(leave);
   } catch (error) {
-    res.status(500).json({ message: "Unable to update leave request" });
+    console.error("Update Leave Error:", error);
+
+    res.status(500).json({
+      message: error.message || "Unable to update leave request",
+    });
   }
 });
 
-// Delete leave request
+// Delete Leave Request
 app.delete("/leaves/:id", async (req, res) => {
   try {
     const leave = await Leave.findByIdAndDelete(req.params.id);
 
     if (!leave) {
-      return res.status(404).json({ message: "Leave request not found" });
+      return res.status(404).json({
+        message: "Leave request not found",
+      });
     }
 
-    res.json({ message: "Leave request deleted successfully" });
+    res.status(200).json({
+      message: "Leave request deleted successfully",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Unable to delete leave request" });
+    console.error("Delete Leave Error:", error);
+
+    res.status(500).json({
+      message: error.message || "Unable to delete leave request",
+    });
   }
 });
 
+// Start Server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
