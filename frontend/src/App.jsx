@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API = "http://localhost:5000/leaves";
+const API_URL = "https://leave-management-backend-ajih.onrender.com/leaves";
 
 function App() {
   const [leaves, setLeaves] = useState([]);
